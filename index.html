@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eren 3D - Batalla contra Titanes</title>
+<style>
+body{margin:0;overflow:hidden;background:#9bd7ed;font-family:Arial}
+#hud{position:fixed;top:12px;left:12px;color:white;background:#172638cc;padding:14px;border-radius:12px;z-index:2}
+#msg{font-size:20px;font-weight:bold;color:#ffe36e}
+#help{position:fixed;bottom:12px;left:12px;color:white;background:#172638cc;padding:12px;border-radius:10px;z-index:2}
+button{padding:10px;margin-top:8px;font-weight:bold;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="hud">
+  <div><b>EREN 3D: CAZA DE TITANES</b></div>
+  <div id="mode">Modo: Humano</div>
+  <div id="score">Titanes derrotados: 0</div>
+  <div id="msg">¡Prepárate, soldado!</div>
+  <button id="transform">MORDER LA MANO: TRANSFORMARSE</button>
+</div>
+<div id="help">WASD: moverte · Ratón: mirar · Espacio: saltar/impulsarte · E: transformarte · Clic: atacar</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9bd7ed);
+scene.fog = new THREE.Fog(0x9bd7ed,45,150);
+const camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,400);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x647b58,2));
+const sun = new THREE.DirectionalLight(0xffffff,2.2);
+sun.position.set(20,35,15); scene.add(sun);
+
+const mat=(color)=>new THREE.MeshStandardMaterial({color,roughness:.85});
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(500,500),mat(0x63864b));
+ground.rotation.x=-Math.PI/2;ground.position.y=-.2;scene.add(ground);
+
+for(let i=0;i<55;i++){
+ const h=3+Math.random()*12;
+ const b=new THREE.Mesh(new THREE.BoxGeometry(3+Math.random()*3,h,3+Math.random()*3),mat([0xb9a184,0xc6b69a,0x9f927d][i%3]));
+ b.position.set((Math.random()-.5)*180,h/2,(Math.random()-.5)*180);
+ scene.add(b);
+}
+const player=new THREE.Group();scene.add(player);
+const body=new THREE.Mesh(new THREE.BoxGeometry(.8,1.3,.45),mat(0x526b48));body.position.y=1.4;player.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.34,16,12),mat(0xe5b78c));head.position.y=2.3;player.add(head);
+for(const x of [-.23,.23]){
+ const leg=new THREE.Mesh(new THREE.BoxGeometry(.25,.8,.3),mat(0x343b48));leg.position.set(x,.45,0);player.add(leg);
+ const arm=new THREE.Mesh(new THREE.BoxGeometry(.23,.9,.25),mat(0xe5b78c));arm.position.set(x*2,1.45,0);player.add(arm);
+}
+player.position.set(0,0,0);
+const titans=[];
+function spawnTitan(x,z,size){
+ const g=new THREE.Group();
+ const skin=mat([0xc18a78,0x9e7567,0xd0a18c][Math.floor(Math.random()*3)]);
+ const torso=new THREE.Mesh(new THREE.BoxGeometry(size*.48,size*.48,size*.25),skin);
+ torso.position.y=size*.53;g.add(torso);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(size*.17,16,12),skin);head.position.y=size*.85;g.add(head);
+ for(const s of [-1,1]){
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(size*.15,size*.48,size*.16),skin);
+  arm.position.set(s*size*.34,size*.48,0);arm.rotation.z=s*.12;g.add(arm);
+  const leg=new THREE.Mesh(new THREE.BoxGeometry(size*.18,size*.45,size*.2),skin);
+  leg.position.set(s*size*.15,size*.2,0);g.add(leg);
+ }
+ g.position.set(x,0,z);scene.add(g);
+ titans.push({g,size,hp:size>9?3:2,alive:true});
+}
+for(let i=0;i<12;i++)spawnTitan((Math.random()-.5)*85,(Math.random()-.5)*85,4+Math.random()*9);
+let titanMode=false,score=0,yaw=0,pitch=0,velocityY=0;
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='e')transform();});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function transform(){
+ titanMode=!titanMode;
+ player.scale.setScalar(titanMode?4:1);
+ document.getElementById('mode').textContent='Modo: '+(titanMode?'Titán de Eren':'Humano');
+ document.getElementById('msg').textContent=titanMode?'¡EREN SE HA TRANSFORMADO!':'¡Usa el equipo de maniobras!';
+}
+document.getElementById('transform').onclick=transform;
+renderer.domElement.addEventListener('click',()=>{
+ if(document.pointerLockElement!==renderer.domElement){renderer.domElement.requestPointerLock();return;}
+ const range=titanMode?13:8;
+ let target=null,best=range;
+ for(const t of titans){if(!t.alive)continue;
+  const d=player.position.distanceTo(t.g.position);
+  if(d<best){best=d;target=t;}
+ }
+ if(target){
+  target.hp-=titanMode?2:1;
+  document.getElementById('msg').textContent=titanMode?'¡GOLPE DE TITÁN!':'¡ATAQUE CON LAS ESPADAS!';
+  if(target.hp<=0){target.alive=false;scene.remove(target.g);score++;
+   document.getElementById('score').textContent='Titanes derrotados: '+score;
+   if(titans.filter(t=>t.alive).length<5)
+    for(let i=0;i<3;i++)spawnTitan(player.position.x+(Math.random()-.5)*60,player.position.z-30-Math.random()*20,4+Math.random()*10);
+  }
+ }else document.getElementById('msg').textContent='¡Acércate a un titán para atacar!';
+});
+document.addEventListener('mousemove',e=>{
+ if(document.pointerLockElement===renderer.domElement){
+  yaw-=e.movementX*.002;pitch-=e.movementY*.002;
+  pitch=Math.max(-1.1,Math.min(1.1,pitch));
+ }
+});
+function animate(){
+ requestAnimationFrame(animate);
+ const speed=titanMode?.19:.12;
+ const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+ const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+ if(keys.w)player.position.addScaledVector(forward,speed);
+ if(keys.s)player.position.addScaledVector(forward,-speed);
+ if(keys.a)player.position.addScaledVector(right,-speed);
+ if(keys.d)player.position.addScaledVector(right,speed);
+ if(keys[' ']&&player.position.y<=.01)velocityY=titanMode?.35:.24;
+ velocityY-=.012;player.position.y=Math.max(0,player.position.y+velocityY);
+ if(player.position.y===0)velocityY=0;
+ player.rotation.y=yaw;
+ for(const t of titans){
+  if(!t.alive)continue;
+  const dx=player.position.x-t.g.position.x,dz=player.position.z-t.g.position.z;
+  const d=Math.hypot(dx,dz);
+  if(d>3&&d<45){t.g.position.x+=dx/d*.025;t.g.position.z+=dz/d*.025;}
+  t.g.lookAt(player.position.x,t.g.position.y,player.position.z);
+ }
+ const eye=titanMode?3.8:2.6;
+ camera.position.set(player.position.x,player.position.y+eye,player.position.z);
+ const look=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
+ camera.lookAt(camera.position.clone().add(look));
+ renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+animate();
+</script>
+</body>
+</html>
